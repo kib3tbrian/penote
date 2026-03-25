@@ -12,6 +12,7 @@
     "@react-navigation/bottom-tabs": "^6.6.1",
     "@react-navigation/native": "^6.1.17",
     "@react-navigation/native-stack": "^6.9.26",
+    "babel-preset-expo": "^55.0.12",
     "expo": "^55.0.8",
     "expo-print": "~55.0.9",
     "expo-sharing": "~55.0.14",
