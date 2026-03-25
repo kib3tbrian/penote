@@ -1,0 +1,35 @@
+{
+  "expo": {
+    "name": "penote",
+    "slug": "penote",
+    "version": "0.0.1",
+    "orientation": "portrait",
+    "userInterfaceStyle": "automatic",
+    "icon": "./assets/icon.png",
+    "splash": {
+      "backgroundColor": "#0D0D0D",
+      "image": "./assets/splash.png",
+      "resizeMode": "contain"
+    },
+    "android": {
+      "package": "com.nogeybix.penote",
+      "adaptiveIcon": {
+        "backgroundColor": "#0D0D0D",
+        "foregroundImage": "./assets/adaptive-icon.png"
+      },
+      "permissions": []
+    },
+    "ios": {
+      "bundleIdentifier": "com.nogeybix.penote",
+      "supportsTablet": false
+    },
+    "extra": {
+      "eas": {
+        "projectId": "e2ed8561-1f38-49ac-b6e8-c62898f84f20"
+      }
+    },
+    "plugins": [
+      "expo-sharing"
+    ]
+  }
+}
