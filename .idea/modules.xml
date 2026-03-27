@@ -2,7 +2,7 @@
 <project version="4">
   <component name="ProjectModuleManager">
     <modules>
-      <module fileurl="file://$PROJECT_DIR$/.idea/note2pdf.iml" filepath="$PROJECT_DIR$/.idea/note2pdf.iml" />
+      <module fileurl="file://$PROJECT_DIR$/.idea/Penote.iml" filepath="$PROJECT_DIR$/.idea/Penote.iml" />
     </modules>
   </component>
 </project>

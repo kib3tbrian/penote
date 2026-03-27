@@ -73,7 +73,7 @@ export default function HomeScreen({ navigation }) {
     <h1>${note.title.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</h1>
     <div class="meta">${new Date(note.createdAt).toLocaleDateString()}</div>
     <p>${note.body.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</p>
-    <div class="footer">Exported securely via <strong>note2pdf</strong></div>
+    <div class="footer">Exported securely via <strong>Penote</strong></div>
   </body>
 </html>`;
     try {

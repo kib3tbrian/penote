@@ -41,7 +41,7 @@ function MainTabs({ colors }) {
         name="NotesList"
         component={HomeScreen}
         options={{
-          title: 'note2pdf',
+          title: 'Penote',
           tabBarIcon: ({ color, size }) => <Home color={color} size={size + 2} />
         }}
       />

@@ -25,7 +25,7 @@ export default function OnboardingScreen({ navigation }) {
         <View style={styles.logoWrapper}>
           <Logo size={132} color={colors.background} backgroundColor={colors.text} />
         </View>
-        <Text style={styles.title}>note2pdf</Text>
+        <Text style={styles.title}>Penote</Text>
         <Text style={styles.subtitle}>
           Capture your thoughts instantly, pin your favorites, and export securely as beautifully formatted PDFs.
         </Text>
