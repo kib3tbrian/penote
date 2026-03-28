@@ -8,6 +8,7 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { StatusBar } from 'expo-status-bar';
 import { Home, Star } from 'lucide-react-native';
 import { useColorScheme, View } from 'react-native';
+import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context'; // ← add this
 
 import HomeScreen from './screens/HomeScreen';
 import EditScreen from './screens/EditScreen';
@@ -19,6 +20,8 @@ const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
 
 function MainTabs({ colors }) {
+  const insets = useSafeAreaInsets(); // ← add this
+
   return (
     <Tab.Navigator
       screenOptions={{
@@ -28,9 +31,9 @@ function MainTabs({ colors }) {
         tabBarStyle: {
           backgroundColor: colors.surface,
           borderTopColor: colors.border,
-          paddingBottom: 8,
+          paddingBottom: insets.bottom || 8, // ← changed
           paddingTop: 8,
-          height: 64,
+          height: 64 + insets.bottom,        // ← changed
         },
         tabBarActiveTintColor: colors.text,
         tabBarInactiveTintColor: colors.muted,
@@ -80,7 +83,7 @@ export default function App() {
   }
 
   return (
-    <>
+    <SafeAreaProvider> {/* ← wrap everything */}
       <StatusBar style="auto" />
       <NavigationContainer theme={isDark ? DarkTheme : DefaultTheme}>
         <Stack.Navigator
@@ -111,7 +114,7 @@ export default function App() {
           />
         </Stack.Navigator>
       </NavigationContainer>
-    </>
+    </SafeAreaProvider> // ← close it
   );
 }
 

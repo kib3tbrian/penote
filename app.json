@@ -2,7 +2,7 @@
   "expo": {
     "name": "Penote",
     "slug": "Penote",
-    "version": "0.0.1",
+    "version": "1.0.1",
     "orientation": "portrait",
     "userInterfaceStyle": "automatic",
     "icon": "./assets/icon.png",
@@ -12,7 +12,7 @@
       "resizeMode": "contain"
     },
     "android": {
-      "package": "com.nogeybix.penote",
+      "package": "com.nogeybix.p3note",
       "adaptiveIcon": {
         "backgroundColor": "#0D0D0D",
         "foregroundImage": "./assets/adaptive-icon.png"
@@ -20,7 +20,7 @@
       "permissions": []
     },
     "ios": {
-      "bundleIdentifier": "com.nogeybix.penote",
+      "bundleIdentifier": "com.nogeybix.p3note",
       "supportsTablet": false
     },
     "extra": {

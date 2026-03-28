@@ -1,5 +1,6 @@
 import React, { useMemo } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Platform, useColorScheme, SafeAreaView } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Platform, useColorScheme } from 'react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'; // ← updated import
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { theme } from '../theme';
 import Logo from '../components/Logo';
@@ -8,6 +9,7 @@ export default function OnboardingScreen({ navigation }) {
   const colorScheme = useColorScheme();
   const isDark = colorScheme === 'dark';
   const colors = isDark ? theme.dark : theme.light;
+  const insets = useSafeAreaInsets(); // ← add this
   const styles = useMemo(() => getStyles(colors), [colors]);
 
   const handleStart = async () => {
@@ -31,7 +33,7 @@ export default function OnboardingScreen({ navigation }) {
         </Text>
       </View>
 
-      <View style={styles.footer}>
+      <View style={[styles.footer, { paddingBottom: insets.bottom + 24 }]}> {/* ← updated */}
         <TouchableOpacity style={styles.button} activeOpacity={0.8} onPress={handleStart}>
           <Text style={styles.buttonText}>Get Started</Text>
         </TouchableOpacity>
@@ -72,7 +74,7 @@ const getStyles = (colors) => StyleSheet.create({
   },
   footer: {
     padding: 24,
-    paddingBottom: Platform.OS === 'ios' ? 48 : 32,
+    paddingBottom: 24, // ← base padding, insets added dynamically above
   },
   button: {
     backgroundColor: colors.accent,

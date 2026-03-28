@@ -11,6 +11,7 @@ import {
   Modal,
   useColorScheme
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context'; // ← add this
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { v4 as uuidv4 } from 'uuid';
 import { Save } from 'lucide-react-native';
@@ -25,6 +26,7 @@ export default function EditScreen({ route, navigation }) {
   const colorScheme = useColorScheme();
   const isDark = colorScheme === 'dark';
   const colors = isDark ? theme.dark : theme.light;
+  const insets = useSafeAreaInsets(); // ← add this
   const styles = useMemo(() => getStyles(colors, isDark), [colors, isDark]);
 
   const handleSave = async () => {
@@ -86,7 +88,8 @@ export default function EditScreen({ route, navigation }) {
           selectionColor={colors.primary}
         />
       </ScrollView>
-      <View style={styles.footer}>
+
+      <View style={[styles.footer, { paddingBottom: insets.bottom + 20 }]}> {/* ← updated */}
         <TouchableOpacity style={styles.saveButton} activeOpacity={0.7} onPress={handleSave}>
           <Save color={colors.accentText} size={20} style={{ marginRight: 8 }} />
           <Text style={styles.saveButtonText}>Save Note</Text>
@@ -129,7 +132,7 @@ const getStyles = (colors, isDark) => StyleSheet.create({
   },
   footer: {
     padding: 20,
-    paddingBottom: Platform.OS === 'ios' ? 40 : 20,
+    paddingBottom: 20, // ← base, insets added dynamically above
     backgroundColor: colors.background,
     borderTopWidth: 1,
     borderTopColor: colors.border,
