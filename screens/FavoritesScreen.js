@@ -2,8 +2,9 @@ import React, { useState, useCallback, useMemo } from 'react';
 import { View, Text, FlatList, StyleSheet, TouchableOpacity, Platform, useColorScheme, LayoutAnimation, UIManager } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Star } from 'lucide-react-native';
+import { Bell, Star } from 'lucide-react-native';
 import { theme } from '../theme';
+import { getReminderLabel } from '../utils/noteHelpers';
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
@@ -28,11 +29,11 @@ export default function FavoritesScreen({ navigation }) {
       const storedNotes = await AsyncStorage.getItem('notes_v1');
       if (storedNotes) {
         const parsed = JSON.parse(storedNotes);
-        setFavorites(parsed.filter(n => n.isPinned));
+        setFavorites(parsed.filter((note) => note.isPinned));
       } else {
         setFavorites([]);
       }
-    } catch (e) { }
+    } catch (error) { }
   };
 
   const togglePin = async (id) => {
@@ -41,11 +42,11 @@ export default function FavoritesScreen({ navigation }) {
       const storedNotes = await AsyncStorage.getItem('notes_v1');
       if (storedNotes) {
         let parsed = JSON.parse(storedNotes);
-        parsed = parsed.map(n => n.id === id ? { ...n, isPinned: !n.isPinned } : n);
+        parsed = parsed.map((note) => (note.id === id ? { ...note, isPinned: !note.isPinned } : note));
         await AsyncStorage.setItem('notes_v1', JSON.stringify(parsed));
-        setFavorites(parsed.filter(n => n.isPinned));
+        setFavorites(parsed.filter((note) => note.isPinned));
       }
-    } catch (e) { }
+    } catch (error) { }
   };
 
   const renderItem = ({ item }) => (
@@ -55,13 +56,19 @@ export default function FavoritesScreen({ navigation }) {
       onPress={() => navigation.navigate('Edit', { note: item, storageKey: 'notes_v1' })}
     >
       <View style={styles.cardContent}>
-        <Text style={styles.cardTitle} numberOfLines={1}>{item.title}</Text>
+        <Text style={styles.cardTitle} numberOfLines={1}>{item.title || 'Untitled Note'}</Text>
         <TouchableOpacity style={styles.pinButton} onPress={() => togglePin(item.id)}>
           <Star color={colors.star} fill={colors.star} size={24} />
         </TouchableOpacity>
       </View>
       <Text style={styles.cardDate}>{new Date(item.createdAt).toLocaleDateString()}</Text>
-      <Text style={styles.cardBody} numberOfLines={2}>{item.body}</Text>
+      {item.reminderAt ? (
+        <View style={styles.reminderPill}>
+          <Bell color={colors.primary} size={14} />
+          <Text style={styles.reminderPillText}>{` ${getReminderLabel(item.reminderAt)}`}</Text>
+        </View>
+      ) : null}
+      <Text style={styles.cardBody} numberOfLines={3}>{item.body}</Text>
     </TouchableOpacity>
   );
 
@@ -113,6 +120,23 @@ const getStyles = (colors) => StyleSheet.create({
   },
   pinButton: { padding: 4, marginRight: -8, marginTop: -4 },
   cardDate: { color: colors.faint, fontSize: 13, marginTop: 2, marginBottom: 12 },
+  reminderPill: {
+    alignSelf: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.background,
+    borderRadius: 9999,
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    marginBottom: 12,
+  },
+  reminderPillText: {
+    color: colors.primary,
+    fontSize: 12,
+    fontWeight: '600',
+  },
   cardBody: { color: colors.muted, fontSize: 16, lineHeight: 22 },
   emptyState: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   emptyIconContainer: {

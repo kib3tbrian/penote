@@ -1,12 +1,31 @@
 import React, { useState, useCallback, useMemo } from 'react';
-import { View, Text, FlatList, StyleSheet, TouchableOpacity, Platform, TextInput, useColorScheme, LayoutAnimation, UIManager, Modal } from 'react-native';
+import {
+  View,
+  Text,
+  FlatList,
+  StyleSheet,
+  TouchableOpacity,
+  Platform,
+  TextInput,
+  useColorScheme,
+  LayoutAnimation,
+  UIManager,
+  Modal,
+  Alert,
+} from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
-import { FileText, Trash2, Plus, Star, Search } from 'lucide-react-native';
+import { Bell, FileText, Trash2, Plus, Star, Search } from 'lucide-react-native';
 import { theme } from '../theme';
+import {
+  escapeHtml,
+  getReminderLabel,
+  sanitizePdfFileName,
+} from '../utils/noteHelpers';
+import { cancelScheduledReminder } from '../utils/reminderHelpers';
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
@@ -36,35 +55,31 @@ export default function HomeScreen({ navigation }) {
       } else {
         setNotes([]);
       }
-    } catch (e) { }
+    } catch (error) { }
   };
 
   const togglePin = async (id) => {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-    const updatedNotes = notes.map(n =>
-      n.id === id ? { ...n, isPinned: !n.isPinned } : n
-    );
+    const updatedNotes = notes.map((existingNote) => (
+      existingNote.id === id ? { ...existingNote, isPinned: !existingNote.isPinned } : existingNote
+    ));
     await AsyncStorage.setItem('notes_v1', JSON.stringify(updatedNotes));
     setNotes(updatedNotes);
   };
 
   const confirmDelete = async () => {
     if (!noteToDelete) return;
+
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-    const updatedNotes = notes.filter((n) => n.id !== noteToDelete);
+    const noteToRemove = notes.find((existingNote) => existingNote.id === noteToDelete);
+    if (noteToRemove?.notificationId) {
+      await cancelScheduledReminder(noteToRemove.notificationId);
+    }
+
+    const updatedNotes = notes.filter((existingNote) => existingNote.id !== noteToDelete);
     await AsyncStorage.setItem('notes_v1', JSON.stringify(updatedNotes));
     setNotes(updatedNotes);
     setNoteToDelete(null);
-  };
-
-  const getPdfFileName = (title) => {
-    const safeTitle = (title || '')
-      .trim()
-      .replace(/[<>:"/\\|?*\x00-\x1F]/g, '')
-      .replace(/\s+/g, ' ')
-      .slice(0, 80);
-
-    return `${safeTitle || 'Untitled Note'}.pdf`;
   };
 
   const exportPDF = async (note) => {
@@ -75,36 +90,57 @@ export default function HomeScreen({ navigation }) {
     <style>
       body { font-family: 'Georgia', serif; padding: 48px; color: #1a1a1a; background: #fff; }
       h1 { font-size: 28px; font-weight: bold; border-bottom: 2px solid #0D0D0D; padding-bottom: 12px; margin-bottom: 6px; }
-      .meta { font-size: 12px; color: #999; margin-bottom: 32px; }
+      .meta { font-size: 12px; color: #999; margin-bottom: 12px; }
+      .reminder { display: inline-block; margin-bottom: 24px; padding: 8px 12px; background: #F4F4F4; border-radius: 999px; font-size: 12px; color: #444; }
       p { font-size: 16px; line-height: 1.9; white-space: pre-wrap; }
       .footer { margin-top: 64px; padding-top: 24px; border-top: 1px solid #E0E0E0; text-align: center; color: #888; font-size: 12px; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
     </style>
   </head>
   <body>
-    <h1>${note.title.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</h1>
+    <h1>${escapeHtml(note.title || 'Untitled Note')}</h1>
     <div class="meta">${new Date(note.createdAt).toLocaleDateString()}</div>
-    <p>${note.body.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</p>
+    ${note.reminderAt ? `<div class="reminder">Reminder: ${escapeHtml(getReminderLabel(note.reminderAt) || '')}</div>` : ''}
+    <p>${escapeHtml(note.body || '')}</p>
     <div class="footer">Exported securely via <strong>Penote</strong></div>
   </body>
 </html>`;
+
     try {
       const { uri } = await Print.printToFileAsync({ html });
-      const fileName = getPdfFileName(note.title);
-      const shareUri = `${FileSystem.cacheDirectory}${fileName}`;
-      await FileSystem.copyAsync({ from: uri, to: shareUri });
-      const canShare = await Sharing.isAvailableAsync();
-      if (canShare) {
-        await Sharing.shareAsync(shareUri, { mimeType: 'application/pdf', UTI: 'com.adobe.pdf' });
+      const shareUri = `${FileSystem.cacheDirectory}${sanitizePdfFileName(note.title)}`;
+      const existingFile = await FileSystem.getInfoAsync(shareUri);
+      if (existingFile.exists) {
+        await FileSystem.deleteAsync(shareUri, { idempotent: true });
       }
-    } catch (error) { }
+
+      await FileSystem.copyAsync({ from: uri, to: shareUri });
+
+      const canShare = await Sharing.isAvailableAsync();
+      if (!canShare) {
+        Alert.alert('Sharing Unavailable', 'PDF was created, but sharing is not available on this device.');
+        return;
+      }
+
+      await Sharing.shareAsync(shareUri, {
+        mimeType: 'application/pdf',
+        UTI: 'com.adobe.pdf',
+        dialogTitle: note.title || 'Share PDF',
+      });
+    } catch (error) {
+      Alert.alert('PDF Export Failed', error.message || 'Unable to export this note as a PDF right now.');
+    }
   };
 
   const filteredNotes = useMemo(() => {
     let result = notes;
     if (searchQuery.trim() !== '') {
-      const q = searchQuery.toLowerCase();
-      result = result.filter(n => n.title.toLowerCase().includes(q) || n.body.toLowerCase().includes(q));
+      const query = searchQuery.toLowerCase();
+      result = result.filter((existingNote) => (
+        (existingNote.title || '').toLowerCase().includes(query) ||
+        (existingNote.body || '').toLowerCase().includes(query)
+      ));
     }
+
     return result.sort((a, b) => {
       if (a.isPinned !== b.isPinned) return a.isPinned ? -1 : 1;
       return new Date(b.createdAt) - new Date(a.createdAt);
@@ -118,13 +154,19 @@ export default function HomeScreen({ navigation }) {
       onPress={() => navigation.navigate('Edit', { note: item, storageKey: 'notes_v1' })}
     >
       <View style={styles.cardContent}>
-        <Text style={styles.cardTitle} numberOfLines={1}>{item.title}</Text>
+        <Text style={styles.cardTitle} numberOfLines={1}>{item.title || 'Untitled Note'}</Text>
         <TouchableOpacity style={styles.pinButton} onPress={() => togglePin(item.id)}>
           <Star color={item.isPinned ? colors.star : colors.faint} fill={item.isPinned ? colors.star : 'none'} size={24} />
         </TouchableOpacity>
       </View>
       <Text style={styles.cardDate}>{new Date(item.createdAt).toLocaleDateString()}</Text>
-      <Text style={styles.cardBody} numberOfLines={1}>{item.body}</Text>
+      {item.reminderAt ? (
+        <View style={styles.reminderPill}>
+          <Bell color={colors.primary} size={14} />
+          <Text style={styles.reminderPillText}>{` ${getReminderLabel(item.reminderAt)}`}</Text>
+        </View>
+      ) : null}
+      <Text style={styles.cardBody} numberOfLines={2}>{item.body}</Text>
       <View style={styles.cardActions}>
         <TouchableOpacity style={styles.actionButton} activeOpacity={0.7} onPress={() => exportPDF(item)}>
           <FileText color={colors.accentText} size={16} />
@@ -168,6 +210,7 @@ export default function HomeScreen({ navigation }) {
           contentContainerStyle={styles.listContent}
         />
       )}
+
       <TouchableOpacity
         style={styles.fab}
         activeOpacity={0.7}
@@ -176,11 +219,13 @@ export default function HomeScreen({ navigation }) {
         <Plus color={colors.accentText} size={32} />
       </TouchableOpacity>
 
-      <Modal animationType="fade" transparent={true} visible={!!noteToDelete} onRequestClose={() => setNoteToDelete(null)}>
+      <Modal animationType="fade" transparent visible={!!noteToDelete} onRequestClose={() => setNoteToDelete(null)}>
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <Text style={styles.modalTitle}>Delete Note</Text>
-            <Text style={styles.modalBodyText}>Are you sure you want to permanently delete this note? This action cannot be undone.</Text>
+            <Text style={styles.modalBodyText}>
+              Are you sure you want to permanently delete this note? This action cannot be undone.
+            </Text>
             <View style={styles.modalActions}>
               <TouchableOpacity style={styles.modalCancelButton} activeOpacity={0.7} onPress={() => setNoteToDelete(null)}>
                 <Text style={styles.modalCancelText}>Cancel</Text>
@@ -236,6 +281,23 @@ const getStyles = (colors, isDark) => StyleSheet.create({
   },
   pinButton: { padding: 4, marginRight: -8, marginTop: -4 },
   cardDate: { color: colors.faint, fontSize: 13, marginTop: 2, marginBottom: 8 },
+  reminderPill: {
+    alignSelf: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.background,
+    borderRadius: 9999,
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    marginBottom: 10,
+  },
+  reminderPillText: {
+    color: colors.primary,
+    fontSize: 12,
+    fontWeight: '600',
+  },
   cardBody: { color: colors.muted, fontSize: 16, marginBottom: 16, lineHeight: 22 },
   cardActions: { flexDirection: 'row', borderTopWidth: 1, borderTopColor: colors.border, paddingTop: 14, paddingBottom: 6 },
   actionButton: {
@@ -323,5 +385,5 @@ const getStyles = (colors, isDark) => StyleSheet.create({
     paddingHorizontal: 24,
     borderRadius: 9999,
   },
-  modalDeleteText: { color: '#FFFFFF', fontSize: 16, fontWeight: 'bold' }
+  modalDeleteText: { color: '#FFFFFF', fontSize: 16, fontWeight: 'bold' },
 });

@@ -2,12 +2,13 @@ import 'react-native-get-random-values';
 import { registerRootComponent } from 'expo';
 import React, { useEffect, useState } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as Notifications from 'expo-notifications';
 import { NavigationContainer, DefaultTheme, DarkTheme } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { StatusBar } from 'expo-status-bar';
 import { Home, Star } from 'lucide-react-native';
-import { useColorScheme, View } from 'react-native';
+import { useColorScheme, View, Platform } from 'react-native';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context'; // ← add this
 
 import HomeScreen from './screens/HomeScreen';
@@ -18,6 +19,15 @@ import { theme } from './theme';
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
+
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowBanner: true,
+    shouldShowList: true,
+    shouldPlaySound: true,
+    shouldSetBadge: false,
+  }),
+});
 
 function MainTabs({ colors }) {
   const insets = useSafeAreaInsets(); // ← add this
@@ -76,6 +86,21 @@ export default function App() {
       }
     }
     checkFirstLaunch();
+  }, []);
+
+  useEffect(() => {
+    async function configureNotifications() {
+      if (Platform.OS !== 'android') return;
+
+      await Notifications.setNotificationChannelAsync('reminders', {
+        name: 'Reminders',
+        importance: Notifications.AndroidImportance.HIGH,
+        vibrationPattern: [0, 250, 250, 250],
+        lightColor: '#007AFF',
+      });
+    }
+
+    configureNotifications();
   }, []);
 
   if (isFirstLaunch === null) {
