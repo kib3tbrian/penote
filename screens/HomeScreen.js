@@ -2,6 +2,7 @@ import React, { useState, useCallback, useMemo } from 'react';
 import { View, Text, FlatList, StyleSheet, TouchableOpacity, Platform, TextInput, useColorScheme, LayoutAnimation, UIManager, Modal } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as FileSystem from 'expo-file-system';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 import { FileText, Trash2, Plus, Star, Search } from 'lucide-react-native';
@@ -56,6 +57,16 @@ export default function HomeScreen({ navigation }) {
     setNoteToDelete(null);
   };
 
+  const getPdfFileName = (title) => {
+    const safeTitle = (title || '')
+      .trim()
+      .replace(/[<>:"/\\|?*\x00-\x1F]/g, '')
+      .replace(/\s+/g, ' ')
+      .slice(0, 80);
+
+    return `${safeTitle || 'Untitled Note'}.pdf`;
+  };
+
   const exportPDF = async (note) => {
     const html = `<!DOCTYPE html>
 <html>
@@ -78,9 +89,12 @@ export default function HomeScreen({ navigation }) {
 </html>`;
     try {
       const { uri } = await Print.printToFileAsync({ html });
+      const fileName = getPdfFileName(note.title);
+      const shareUri = `${FileSystem.cacheDirectory}${fileName}`;
+      await FileSystem.copyAsync({ from: uri, to: shareUri });
       const canShare = await Sharing.isAvailableAsync();
       if (canShare) {
-        await Sharing.shareAsync(uri, { mimeType: 'application/pdf', UTI: 'com.adobe.pdf' });
+        await Sharing.shareAsync(shareUri, { mimeType: 'application/pdf', UTI: 'com.adobe.pdf' });
       }
     } catch (error) { }
   };
