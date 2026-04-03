@@ -28,8 +28,7 @@
       }
     },
     "plugins": [
-      "expo-sharing",
-      "expo-notifications"
+      "expo-sharing"
     ]
   }
 }

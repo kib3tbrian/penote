@@ -2,35 +2,27 @@ import 'react-native-get-random-values';
 import { registerRootComponent } from 'expo';
 import React, { useEffect, useState } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import * as Notifications from 'expo-notifications';
 import { NavigationContainer, DefaultTheme, DarkTheme } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { StatusBar } from 'expo-status-bar';
 import { Home, Star } from 'lucide-react-native';
-import { useColorScheme, View, Platform } from 'react-native';
-import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context'; // ← add this
+import { useColorScheme, View } from 'react-native';
+import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import HomeScreen from './screens/HomeScreen';
 import EditScreen from './screens/EditScreen';
 import FavoritesScreen from './screens/FavoritesScreen';
 import OnboardingScreen from './screens/OnboardingScreen';
+import TrashScreen from './screens/TrashScreen';
 import { theme } from './theme';
+import { cleanupExpiredTrashStorage } from './utils/noteStorage';
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
 
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowBanner: true,
-    shouldShowList: true,
-    shouldPlaySound: true,
-    shouldSetBadge: false,
-  }),
-});
-
 function MainTabs({ colors }) {
-  const insets = useSafeAreaInsets(); // ← add this
+  const insets = useSafeAreaInsets();
 
   return (
     <Tab.Navigator
@@ -41,9 +33,9 @@ function MainTabs({ colors }) {
         tabBarStyle: {
           backgroundColor: colors.surface,
           borderTopColor: colors.border,
-          paddingBottom: insets.bottom || 8, // ← changed
+          paddingBottom: insets.bottom || 8,
           paddingTop: 8,
-          height: 64 + insets.bottom,        // ← changed
+          height: 64 + insets.bottom,
         },
         tabBarActiveTintColor: colors.text,
         tabBarInactiveTintColor: colors.muted,
@@ -55,7 +47,7 @@ function MainTabs({ colors }) {
         component={HomeScreen}
         options={{
           title: 'Penote',
-          tabBarIcon: ({ color, size }) => <Home color={color} size={size + 2} />
+          tabBarIcon: ({ color, size }) => <Home color={color} size={size + 2} />,
         }}
       />
       <Tab.Screen
@@ -63,7 +55,7 @@ function MainTabs({ colors }) {
         component={FavoritesScreen}
         options={{
           title: 'Favorites',
-          tabBarIcon: ({ color, size }) => <Star color={color} size={size + 2} />
+          tabBarIcon: ({ color, size }) => <Star color={color} size={size + 2} />,
         }}
       />
     </Tab.Navigator>
@@ -77,30 +69,19 @@ export default function App() {
   const colors = isDark ? theme.dark : theme.light;
 
   useEffect(() => {
-    async function checkFirstLaunch() {
+    async function bootstrapApp() {
       try {
-        const value = await AsyncStorage.getItem('has_onboarded');
+        const [value] = await Promise.all([
+          AsyncStorage.getItem('has_onboarded'),
+          cleanupExpiredTrashStorage(),
+        ]);
         setIsFirstLaunch(value === null);
-      } catch (e) {
+      } catch (error) {
         setIsFirstLaunch(false);
       }
     }
-    checkFirstLaunch();
-  }, []);
 
-  useEffect(() => {
-    async function configureNotifications() {
-      if (Platform.OS !== 'android') return;
-
-      await Notifications.setNotificationChannelAsync('reminders', {
-        name: 'Reminders',
-        importance: Notifications.AndroidImportance.HIGH,
-        vibrationPattern: [0, 250, 250, 250],
-        lightColor: '#007AFF',
-      });
-    }
-
-    configureNotifications();
+    bootstrapApp();
   }, []);
 
   if (isFirstLaunch === null) {
@@ -108,7 +89,7 @@ export default function App() {
   }
 
   return (
-    <SafeAreaProvider> {/* ← wrap everything */}
+    <SafeAreaProvider>
       <StatusBar style="auto" />
       <NavigationContainer theme={isDark ? DarkTheme : DefaultTheme}>
         <Stack.Navigator
@@ -117,7 +98,8 @@ export default function App() {
             headerStyle: { backgroundColor: colors.background },
             headerTintColor: colors.text,
             contentStyle: { backgroundColor: colors.background },
-          }}>
+          }}
+        >
           <Stack.Screen
             name="Onboarding"
             component={OnboardingScreen}
@@ -137,9 +119,14 @@ export default function App() {
               presentation: 'modal',
             })}
           />
+          <Stack.Screen
+            name="Trash"
+            component={TrashScreen}
+            options={{ title: 'Trash' }}
+          />
         </Stack.Navigator>
       </NavigationContainer>
-    </SafeAreaProvider> // ← close it
+    </SafeAreaProvider>
   );
 }
 

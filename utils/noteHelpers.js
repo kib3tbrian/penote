@@ -1,5 +1,8 @@
 export const REVIEW_COUNT_KEY = 'notes_created_count_v1';
 export const REVIEW_PROMPTED_KEY = 'has_prompted_review_v1';
+export const NOTES_STORAGE_KEY = 'notes_v1';
+export const TRASH_STORAGE_KEY = 'trash_v1';
+export const TRASH_RETENTION_DAYS = 7;
 
 export const sanitizePdfFileName = (title) => {
   const safeTitle = (title || '')
@@ -19,38 +22,146 @@ export const escapeHtml = (value = '') =>
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;');
 
-export const getReminderLabel = (reminderAt) => {
-  if (!reminderAt) return null;
+export const removeReminderFields = (note) => {
+  if (!note) return note;
 
-  const reminderDate = new Date(reminderAt);
-  if (Number.isNaN(reminderDate.getTime())) return null;
-
-  return reminderDate.toLocaleString([], {
-    dateStyle: 'medium',
-    timeStyle: 'short',
-  });
+  const { reminderAt, notificationId, ...noteWithoutReminder } = note;
+  return noteWithoutReminder;
 };
 
-export const getReminderOptions = () => {
-  const now = new Date();
-  const tonight = new Date(now);
-  tonight.setHours(20, 0, 0, 0);
-  if (tonight <= now) {
-    tonight.setDate(tonight.getDate() + 1);
+export const ensureHtmlContent = (value = '') => {
+  if (!value) return '';
+
+  const trimmedValue = value.trim();
+  if (!trimmedValue) return '';
+
+  if (/<\/?[a-z][\s\S]*>/i.test(trimmedValue)) {
+    return trimmedValue;
   }
 
-  const tomorrowMorning = new Date(now);
-  tomorrowMorning.setDate(tomorrowMorning.getDate() + 1);
-  tomorrowMorning.setHours(9, 0, 0, 0);
-
-  const nextWeek = new Date(now);
-  nextWeek.setDate(nextWeek.getDate() + 7);
-  nextWeek.setHours(9, 0, 0, 0);
-
-  return [
-    { key: 'hour', label: 'In 1 hour', date: new Date(now.getTime() + 60 * 60 * 1000) },
-    { key: 'tonight', label: 'Tonight 8 PM', date: tonight },
-    { key: 'tomorrow', label: 'Tomorrow 9 AM', date: tomorrowMorning },
-    { key: 'week', label: 'Next week', date: nextWeek },
-  ];
+  return trimmedValue
+    .split(/\n{2,}/)
+    .map((paragraph) => `<p>${escapeHtml(paragraph).replace(/\n/g, '<br/>')}</p>`)
+    .join('');
 };
+
+export const stripHtml = (value = '') =>
+  value
+    .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/p>/gi, '\n')
+    .replace(/<\/div>/gi, '\n')
+    .replace(/<\/li>/gi, '\n')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&amp;/gi, '&')
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;/gi, "'")
+    .replace(/\u00A0/g, ' ')
+    .replace(/[ \t]+\n/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .replace(/[ \t]{2,}/g, ' ')
+    .trim();
+
+export const isHtmlContentEmpty = (value = '') => stripHtml(value).trim().length === 0;
+
+export const getBodyPreview = (value = '') =>
+  stripHtml(ensureHtmlContent(value)).replace(/\s+/g, ' ').trim();
+
+export const getSearchableText = (note) =>
+  `${note?.title || ''} ${getBodyPreview(note?.body || '')}`.toLowerCase();
+
+export const normalizeNote = (note) => {
+  const cleanedNote = removeReminderFields(note) || {};
+  const timestamp = cleanedNote.updatedAt || cleanedNote.createdAt || new Date().toISOString();
+
+  return {
+    ...cleanedNote,
+    id: cleanedNote.id,
+    title: cleanedNote.title || '',
+    body: ensureHtmlContent(cleanedNote.body || ''),
+    createdAt: cleanedNote.createdAt || timestamp,
+    updatedAt: cleanedNote.updatedAt || timestamp,
+    isPinned: Boolean(cleanedNote.isPinned),
+  };
+};
+
+export const normalizeTrashNote = (note) => ({
+  ...normalizeNote(note),
+  deletedAt: note?.deletedAt || new Date().toISOString(),
+});
+
+export const formatNoteDate = (value) => {
+  if (!value) return '';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  return date.toLocaleDateString();
+};
+
+export const getNoteDateLabel = (note) => {
+  if (note?.updatedAt && note.updatedAt !== note.createdAt) {
+    return `Edited ${formatNoteDate(note.updatedAt)}`;
+  }
+
+  return `Created ${formatNoteDate(note.createdAt)}`;
+};
+
+export const buildNoteDocumentHtml = (note) => `<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8"/>
+    <style>
+      body { font-family: 'Georgia', serif; padding: 48px; color: #1a1a1a; background: #fff; }
+      h1 { font-size: 28px; font-weight: bold; border-bottom: 2px solid #0D0D0D; padding-bottom: 12px; margin-bottom: 6px; }
+      .meta { font-size: 12px; color: #999; margin-bottom: 24px; }
+      .content { font-size: 16px; line-height: 1.9; }
+      .content ul { padding-left: 20px; }
+      .content ol { padding-left: 20px; }
+      .footer { margin-top: 64px; padding-top: 24px; border-top: 1px solid #E0E0E0; text-align: center; color: #888; font-size: 12px; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+    </style>
+  </head>
+  <body>
+    <h1>${escapeHtml(note.title || 'Untitled Note')}</h1>
+    <div class="meta">${formatNoteDate(note.updatedAt || note.createdAt)}</div>
+    <div class="content">${ensureHtmlContent(note.body || '')}</div>
+    <div class="footer">Exported securely via <strong>Penote</strong></div>
+  </body>
+</html>`;
+
+export const orderNotesWithFavoritesFirst = (notes) => {
+  const favorites = [];
+  const regularNotes = [];
+
+  notes.forEach((note) => {
+    if (note.isPinned) {
+      favorites.push(note);
+      return;
+    }
+
+    regularNotes.push(note);
+  });
+
+  return [...favorites, ...regularNotes];
+};
+
+export const isTrashExpired = (note, now = Date.now()) => {
+  if (!note?.deletedAt) return false;
+  return now - new Date(note.deletedAt).getTime() >= TRASH_RETENTION_DAYS * 24 * 60 * 60 * 1000;
+};
+
+const parseStoredArray = (value) => {
+  if (!value) return [];
+
+  try {
+    const parsedValue = JSON.parse(value);
+    return Array.isArray(parsedValue) ? parsedValue : [];
+  } catch (error) {
+    return [];
+  }
+};
+
+export const parseStoredNotes = (value) => parseStoredArray(value).map(normalizeNote);
+export const parseStoredTrash = (value) => parseStoredArray(value).map(normalizeTrashNote);

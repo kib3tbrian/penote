@@ -1,14 +1,23 @@
-import React, { useState, useCallback, useMemo } from 'react';
-import { View, Text, FlatList, StyleSheet, TouchableOpacity, Platform, useColorScheme, LayoutAnimation, UIManager } from 'react-native';
+import React, { useCallback, useMemo, useState } from 'react';
+import { Alert, FlatList, Platform, StyleSheet, Text, useColorScheme, View } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Bell, Star } from 'lucide-react-native';
+import * as FileSystem from 'expo-file-system/legacy';
+import * as Print from 'expo-print';
+import * as Sharing from 'expo-sharing';
+import { Star, Trash2 } from 'lucide-react-native';
+import NoteCard from '../components/NoteCard';
 import { theme } from '../theme';
-import { getReminderLabel } from '../utils/noteHelpers';
-
-if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
-  UIManager.setLayoutAnimationEnabledExperimental(true);
-}
+import {
+  buildNoteDocumentHtml,
+  getBodyPreview,
+  getNoteDateLabel,
+  sanitizePdfFileName,
+} from '../utils/noteHelpers';
+import {
+  loadNotes,
+  moveNoteToTrash,
+  saveNotes,
+} from '../utils/noteStorage';
 
 export default function FavoritesScreen({ navigation }) {
   const [favorites, setFavorites] = useState([]);
@@ -18,58 +27,85 @@ export default function FavoritesScreen({ navigation }) {
   const colors = isDark ? theme.dark : theme.light;
   const styles = useMemo(() => getStyles(colors), [colors]);
 
+  const loadData = useCallback(async () => {
+    try {
+      const storedNotes = await loadNotes();
+      setFavorites(storedNotes.filter((note) => note.isPinned));
+    } catch (error) { }
+  }, []);
+
   useFocusEffect(
     useCallback(() => {
-      loadFavorites();
-    }, [])
+      loadData();
+    }, [loadData])
   );
 
-  const loadFavorites = async () => {
-    try {
-      const storedNotes = await AsyncStorage.getItem('notes_v1');
-      if (storedNotes) {
-        const parsed = JSON.parse(storedNotes);
-        setFavorites(parsed.filter((note) => note.isPinned));
-      } else {
-        setFavorites([]);
-      }
-    } catch (error) { }
+  const handleToggleFavorite = async (noteId) => {
+    const storedNotes = await loadNotes();
+    const updatedNotes = storedNotes.map((note) => (
+      note.id === noteId ? { ...note, isPinned: !note.isPinned, updatedAt: new Date().toISOString() } : note
+    ));
+    const savedNotes = await saveNotes(updatedNotes);
+    setFavorites(savedNotes.filter((note) => note.isPinned));
   };
 
-  const togglePin = async (id) => {
+  const handleMoveToTrash = async (noteId) => {
+    const result = await moveNoteToTrash(noteId);
+    setFavorites(result.notes.filter((note) => note.isPinned));
+  };
+
+  const exportPDF = async (note) => {
     try {
-      LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-      const storedNotes = await AsyncStorage.getItem('notes_v1');
-      if (storedNotes) {
-        let parsed = JSON.parse(storedNotes);
-        parsed = parsed.map((note) => (note.id === id ? { ...note, isPinned: !note.isPinned } : note));
-        await AsyncStorage.setItem('notes_v1', JSON.stringify(parsed));
-        setFavorites(parsed.filter((note) => note.isPinned));
+      const { uri } = await Print.printToFileAsync({ html: buildNoteDocumentHtml(note) });
+      const shareUri = `${FileSystem.cacheDirectory}${sanitizePdfFileName(note.title)}`;
+      const existingFile = await FileSystem.getInfoAsync(shareUri);
+      if (existingFile.exists) {
+        await FileSystem.deleteAsync(shareUri, { idempotent: true });
       }
-    } catch (error) { }
+
+      await FileSystem.copyAsync({ from: uri, to: shareUri });
+
+      const canShare = await Sharing.isAvailableAsync();
+      if (!canShare) {
+        Alert.alert('Sharing Unavailable', 'PDF was created, but sharing is not available on this device.');
+        return;
+      }
+
+      await Sharing.shareAsync(shareUri, {
+        mimeType: 'application/pdf',
+        UTI: 'com.adobe.pdf',
+        dialogTitle: note.title || 'Share PDF',
+      });
+    } catch (error) {
+      Alert.alert('PDF Export Failed', error.message || 'Unable to export this note as a PDF right now.');
+    }
   };
 
   const renderItem = ({ item }) => (
-    <TouchableOpacity
-      style={styles.card}
-      activeOpacity={0.7}
-      onPress={() => navigation.navigate('Edit', { note: item, storageKey: 'notes_v1' })}
-    >
-      <View style={styles.cardContent}>
-        <Text style={styles.cardTitle} numberOfLines={1}>{item.title || 'Untitled Note'}</Text>
-        <TouchableOpacity style={styles.pinButton} onPress={() => togglePin(item.id)}>
-          <Star color={colors.star} fill={colors.star} size={24} />
-        </TouchableOpacity>
-      </View>
-      <Text style={styles.cardDate}>{new Date(item.createdAt).toLocaleDateString()}</Text>
-      {item.reminderAt ? (
-        <View style={styles.reminderPill}>
-          <Bell color={colors.primary} size={14} />
-          <Text style={styles.reminderPillText}>{` ${getReminderLabel(item.reminderAt)}`}</Text>
-        </View>
-      ) : null}
-      <Text style={styles.cardBody} numberOfLines={3}>{item.body}</Text>
-    </TouchableOpacity>
+    <NoteCard
+      colors={colors}
+      title={item.title}
+      preview={getBodyPreview(item.body)}
+      dateLabel={getNoteDateLabel(item)}
+      onPress={() => navigation.navigate('Edit', { note: item })}
+      topRightAction={{
+        onPress: () => handleToggleFavorite(item.id),
+        icon: <Star color={colors.star} fill={colors.star} size={16} />,
+      }}
+      actions={[
+        {
+          label: 'Export',
+          onPress: () => exportPDF(item),
+          icon: <Text style={{ color: colors.text, fontSize: 14, fontWeight: '700' }}>PDF</Text>,
+        },
+        {
+          label: 'Trash',
+          onPress: () => handleMoveToTrash(item.id),
+          icon: <Trash2 color={colors.danger} size={15} />,
+          color: colors.danger,
+        },
+      ]}
+    />
   );
 
   return (
@@ -77,10 +113,10 @@ export default function FavoritesScreen({ navigation }) {
       {favorites.length === 0 ? (
         <View style={styles.emptyState}>
           <View style={styles.emptyIconContainer}>
-            <Star color={colors.faint} size={48} />
+            <Star color={colors.faint} size={42} />
           </View>
           <Text style={styles.emptyMessage}>No favorites yet</Text>
-          <Text style={styles.emptyHint}>Pin a note to see it here</Text>
+          <Text style={styles.emptyHint}>Tap Favorite on a note card to keep it here.</Text>
         </View>
       ) : (
         <FlatList
@@ -96,60 +132,36 @@ export default function FavoritesScreen({ navigation }) {
 
 const getStyles = (colors) => StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
-  listContent: { padding: 16 },
-  card: {
-    backgroundColor: colors.surface,
-    borderRadius: 20,
-    padding: 20,
-    marginBottom: 16,
-    borderWidth: 1,
-    borderColor: colors.border,
-    ...Platform.select({
-      ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 8 },
-      android: { elevation: 2 },
-    }),
+  listContent: {
+    padding: 16,
+    paddingBottom: 32,
   },
-  cardContent: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
-  cardTitle: {
-    color: colors.text,
-    fontSize: 20,
-    fontWeight: Platform.OS === 'ios' ? '600' : 'bold',
-    fontFamily: Platform.OS === 'ios' ? 'Georgia' : 'serif',
+  emptyState: {
     flex: 1,
-    marginRight: 12,
-  },
-  pinButton: { padding: 4, marginRight: -8, marginTop: -4 },
-  cardDate: { color: colors.faint, fontSize: 13, marginTop: 2, marginBottom: 12 },
-  reminderPill: {
-    alignSelf: 'flex-start',
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: colors.background,
-    borderRadius: 9999,
-    borderWidth: 1,
-    borderColor: colors.border,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    marginBottom: 12,
-  },
-  reminderPillText: {
-    color: colors.primary,
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  cardBody: { color: colors.muted, fontSize: 16, lineHeight: 22 },
-  emptyState: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  emptyIconContainer: {
-    width: 96,
-    height: 96,
-    borderRadius: 48,
-    backgroundColor: colors.surface,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 24,
+    paddingHorizontal: 32,
+  },
+  emptyIconContainer: {
+    width: 88,
+    height: 88,
+    borderRadius: 44,
+    backgroundColor: colors.surface,
     borderWidth: 1,
     borderColor: colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 20,
   },
-  emptyMessage: { color: colors.text, fontSize: 20, fontWeight: '600', marginBottom: 8 },
-  emptyHint: { color: colors.muted, fontSize: 16 },
+  emptyMessage: {
+    color: colors.text,
+    fontSize: 20,
+    fontWeight: '600',
+    marginBottom: 8,
+  },
+  emptyHint: {
+    color: colors.muted,
+    fontSize: 15,
+    textAlign: 'center',
+  },
 });
