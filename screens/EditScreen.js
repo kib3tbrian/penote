@@ -184,12 +184,14 @@ const getStyles = (colors) => StyleSheet.create({
     flex: 1,
     backgroundColor: colors.surface,
     borderRadius: 20,
-    borderWidth: 1,
-    borderColor: colors.border,
     overflow: 'hidden',
     paddingHorizontal: 14,
     paddingTop: 14,
     paddingBottom: 4,
+    ...Platform.select({
+      ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.03, shadowRadius: 10 },
+      android: { elevation: 1 },
+    }),
   },
   editor: {
     flex: 1,
