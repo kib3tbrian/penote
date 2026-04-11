@@ -1,0 +1,10 @@
+Starting project at C:\Users\STAFF\Downloads\Dunny\penote
+Metro is running in CI mode, reloads are disabled. Remove CI=true to enable watch mode.
+Starting Metro Bundler
+
+ ERROR  An unknown error occurred while installing React Native DevTools. Details:
+
+spawn EPERM
+Waiting on http://localhost:8081
+Logs for your project will appear below.
+^C^C
