@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   Alert,
   KeyboardAvoidingView,
@@ -12,13 +12,13 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as StoreReview from 'expo-store-review';
-import { RichEditor } from 'react-native-pell-rich-editor';
 import { v4 as uuidv4 } from 'uuid';
 import { Save } from 'lucide-react-native';
 import { theme } from '../theme';
 import {
   REVIEW_COUNT_KEY,
   REVIEW_PROMPTED_KEY,
+  getBodyPreview,
   ensureHtmlContent,
   isHtmlContentEmpty,
 } from '../utils/noteHelpers';
@@ -27,23 +27,14 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export default function EditScreen({ route, navigation }) {
   const { note } = route.params || {};
-  const editorRef = useRef(null);
-  const hasHydratedInitialHtml = useRef(false);
   const [title, setTitle] = useState(note ? note.title : '');
-  const [bodyHtml, setBodyHtml] = useState(ensureHtmlContent(note?.body || ''));
-  const [editorReady, setEditorReady] = useState(false);
+  const [body, setBody] = useState(getBodyPreview(note?.body || ''));
 
   const colorScheme = useColorScheme();
   const isDark = colorScheme === 'dark';
   const colors = isDark ? theme.dark : theme.light;
   const styles = useMemo(() => getStyles(colors), [colors]);
   const insets = useSafeAreaInsets();
-
-  useEffect(() => {
-    if (!editorReady || !editorRef.current || hasHydratedInitialHtml.current) return;
-    editorRef.current.setContentHTML(bodyHtml);
-    hasHydratedInitialHtml.current = true;
-  }, [bodyHtml, editorReady]);
 
   const maybeRequestReview = async () => {
     const currentCount = Number(await AsyncStorage.getItem(REVIEW_COUNT_KEY) || '0');
@@ -62,8 +53,7 @@ export default function EditScreen({ route, navigation }) {
 
   const handleSave = async () => {
     try {
-      const editorHtml = await editorRef.current?.getContentHtml?.();
-      const currentHtml = ensureHtmlContent(editorHtml || bodyHtml || '');
+      const currentHtml = ensureHtmlContent(body || '');
 
       if (!title.trim() && isHtmlContentEmpty(currentHtml)) {
         Alert.alert('Empty Note', 'Please add a title or some content before saving.');
@@ -127,27 +117,15 @@ export default function EditScreen({ route, navigation }) {
         />
 
         <View style={styles.editorShell}>
-          <RichEditor
-            ref={editorRef}
-            style={styles.editor}
-            initialHeight={320}
+          <TextInput
+            style={styles.bodyInput}
             placeholder="Start typing your thoughts..."
-            initialContentHTML={bodyHtml}
-            editorInitializedCallback={() => setEditorReady(true)}
-            onChange={setBodyHtml}
-            editorStyle={{
-              backgroundColor: colors.surface,
-              color: colors.text,
-              caretColor: colors.primary,
-              placeholderColor: colors.muted,
-              contentCSSText: `
-                font-size: 18px;
-                line-height: 1.7;
-                color: ${colors.text};
-                background-color: ${colors.surface};
-                padding: 0 0 32px 0;
-              `,
-            }}
+            placeholderTextColor={colors.muted}
+            value={body}
+            onChangeText={setBody}
+            multiline
+            textAlignVertical="top"
+            selectionColor={colors.primary}
           />
         </View>
       </View>
@@ -193,10 +171,13 @@ const getStyles = (colors) => StyleSheet.create({
       android: { elevation: 1 },
     }),
   },
-  editor: {
+  bodyInput: {
     flex: 1,
     minHeight: 320,
-    backgroundColor: colors.surface,
+    color: colors.text,
+    fontSize: 18,
+    lineHeight: 28,
+    paddingBottom: 24,
   },
   footer: {
     borderTopWidth: 1,
