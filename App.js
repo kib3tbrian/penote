@@ -17,6 +17,7 @@ import OnboardingScreen from './screens/OnboardingScreen';
 import TrashScreen from './screens/TrashScreen';
 import { theme } from './theme';
 import { cleanupExpiredTrashStorage } from './utils/noteStorage';
+import { LEGACY_ONBOARDING_KEY, ONBOARDING_COMPLETE_KEY } from './utils/noteHelpers';
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -71,11 +72,12 @@ export default function App() {
   useEffect(() => {
     async function bootstrapApp() {
       try {
-        const [value] = await Promise.all([
-          AsyncStorage.getItem('has_onboarded'),
+        const [onboardingComplete, legacyOnboarded] = await Promise.all([
+          AsyncStorage.getItem(ONBOARDING_COMPLETE_KEY),
+          AsyncStorage.getItem(LEGACY_ONBOARDING_KEY),
           cleanupExpiredTrashStorage(),
         ]);
-        setIsFirstLaunch(value === null);
+        setIsFirstLaunch(onboardingComplete !== 'true' && legacyOnboarded !== 'true');
       } catch (error) {
         setIsFirstLaunch(false);
       }

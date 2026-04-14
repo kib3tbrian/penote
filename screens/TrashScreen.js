@@ -4,7 +4,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { Trash2 } from 'lucide-react-native';
 import NoteCard from '../components/NoteCard';
 import { theme } from '../theme';
-import { formatNoteDate, getBodyPreview } from '../utils/noteHelpers';
+import { getBodyPreview, getNoteContent } from '../utils/noteHelpers';
 import {
   emptyTrash,
   loadTrash,
@@ -19,6 +19,26 @@ export default function TrashScreen() {
   const isDark = colorScheme === 'dark';
   const colors = isDark ? theme.dark : theme.light;
   const styles = useMemo(() => getStyles(colors), [colors]);
+
+  const getDaysRemaining = (deletedAt) => {
+    const elapsed = Date.now() - new Date(deletedAt).getTime();
+    const remaining = Math.ceil((7 * 24 * 60 * 60 * 1000 - elapsed) / (1000 * 60 * 60 * 24));
+    return Math.max(remaining, 0);
+  };
+
+  const getCountdownLabel = (deletedAt) => {
+    const remaining = getDaysRemaining(deletedAt);
+
+    if (remaining > 1) {
+      return `Deletes in ${remaining} days`;
+    }
+
+    if (remaining === 1) {
+      return 'Deletes tomorrow';
+    }
+
+    return 'Deletes today';
+  };
 
   const loadTrashNotes = useCallback(async () => {
     try {
@@ -80,8 +100,9 @@ export default function TrashScreen() {
     <NoteCard
       colors={colors}
       title={item.title}
-      preview={getBodyPreview(item.body)}
-      dateLabel={`Deleted ${formatNoteDate(item.deletedAt)}`}
+      preview={getBodyPreview(getNoteContent(item))}
+      dateLabel={getCountdownLabel(item.deletedAt)}
+      dateColor={getDaysRemaining(item.deletedAt) === 0 ? colors.danger : colors.faint}
       onPress={() => {}}
       actions={[
         {

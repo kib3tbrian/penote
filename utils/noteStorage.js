@@ -30,6 +30,27 @@ export const saveNotes = async (notes) => {
   return normalizedNotes;
 };
 
+export const saveNote = async (noteInput) => {
+  const existingNotes = await loadNotes();
+  const existingNote = noteInput?.id
+    ? existingNotes.find((note) => note.id === noteInput.id)
+    : null;
+  const timestamp = new Date().toISOString();
+  const savedNote = normalizeNote({
+    ...existingNote,
+    ...noteInput,
+    createdAt: noteInput?.createdAt || existingNote?.createdAt || timestamp,
+    updatedAt: timestamp,
+  });
+
+  const updatedNotes = existingNote
+    ? existingNotes.map((note) => (note.id === savedNote.id ? savedNote : note))
+    : [savedNote, ...existingNotes];
+
+  await AsyncStorage.setItem(NOTES_STORAGE_KEY, JSON.stringify(updatedNotes));
+  return savedNote;
+};
+
 export const loadTrash = async () => {
   const storedValue = await AsyncStorage.getItem(TRASH_STORAGE_KEY);
   const trashNotes = parseStoredTrash(storedValue);

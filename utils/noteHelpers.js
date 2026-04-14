@@ -3,6 +3,8 @@ export const REVIEW_PROMPTED_KEY = 'has_prompted_review_v1';
 export const NOTES_STORAGE_KEY = 'notes_v1';
 export const TRASH_STORAGE_KEY = 'trash_v1';
 export const TRASH_RETENTION_DAYS = 7;
+export const ONBOARDING_COMPLETE_KEY = 'onboarding_complete';
+export const LEGACY_ONBOARDING_KEY = 'has_onboarded';
 
 export const sanitizePdfFileName = (title) => {
   const safeTitle = (title || '')
@@ -71,18 +73,22 @@ export const isHtmlContentEmpty = (value = '') => stripHtml(value).trim().length
 export const getBodyPreview = (value = '') =>
   stripHtml(ensureHtmlContent(value)).replace(/\s+/g, ' ').trim();
 
+export const getNoteContent = (note) => ensureHtmlContent(note?.content ?? note?.body ?? '');
+
 export const getSearchableText = (note) =>
-  `${note?.title || ''} ${getBodyPreview(note?.body || '')}`.toLowerCase();
+  `${note?.title || ''} ${getBodyPreview(getNoteContent(note))}`.toLowerCase();
 
 export const normalizeNote = (note) => {
   const cleanedNote = removeReminderFields(note) || {};
   const timestamp = cleanedNote.updatedAt || cleanedNote.createdAt || new Date().toISOString();
+  const normalizedContent = ensureHtmlContent(cleanedNote.content ?? cleanedNote.body ?? '');
 
   return {
     ...cleanedNote,
     id: cleanedNote.id,
     title: cleanedNote.title || '',
-    body: ensureHtmlContent(cleanedNote.body || ''),
+    body: normalizedContent,
+    content: normalizedContent,
     createdAt: cleanedNote.createdAt || timestamp,
     updatedAt: cleanedNote.updatedAt || timestamp,
     isPinned: Boolean(cleanedNote.isPinned),
@@ -126,7 +132,7 @@ export const buildNoteDocumentHtml = (note) => `<!DOCTYPE html>
   <body>
     <h1>${escapeHtml(note.title || 'Untitled Note')}</h1>
     <div class="meta">${formatNoteDate(note.updatedAt || note.createdAt)}</div>
-    <div class="content">${ensureHtmlContent(note.body || '')}</div>
+    <div class="content">${getNoteContent(note)}</div>
     <div class="footer">Exported securely via <strong>Penote</strong></div>
   </body>
 </html>`;

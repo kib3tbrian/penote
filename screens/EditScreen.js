@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
   KeyboardAvoidingView,
@@ -15,25 +15,25 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as StoreReview from 'expo-store-review';
 import { v4 as uuidv4 } from 'uuid';
-import { Save } from 'lucide-react-native';
+import { ChevronLeft } from 'lucide-react-native';
+import { RichEditor, RichToolbar, actions } from 'react-native-pell-rich-editor';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { theme } from '../theme';
 import {
   REVIEW_COUNT_KEY,
   REVIEW_PROMPTED_KEY,
-  getBodyPreview,
   ensureHtmlContent,
   isHtmlContentEmpty,
 } from '../utils/noteHelpers';
-import { loadNotes, saveNotes } from '../utils/noteStorage';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as noteStorage from '../utils/noteStorage';
 
 export default function EditScreen({ route, navigation }) {
   const { note } = route.params || {};
-  const initialTitle = note ? note.title : '';
-  const initialBody = getBodyPreview(note?.body || '');
+  const initialTitle = note?.title || '';
+  const initialContent = ensureHtmlContent(note?.content ?? note?.body ?? '');
 
   const [title, setTitle] = useState(initialTitle);
-  const [body, setBody] = useState(initialBody);
+  const [contentHtml, setContentHtml] = useState(initialContent);
   const [isPromptVisible, setIsPromptVisible] = useState(false);
 
   const colorScheme = useColorScheme();
@@ -43,8 +43,9 @@ export default function EditScreen({ route, navigation }) {
   const insets = useSafeAreaInsets();
   const pendingActionRef = useRef(null);
   const bypassPromptRef = useRef(false);
+  const editorRef = useRef(null);
 
-  const hasUnsavedChanges = title !== initialTitle || body !== initialBody;
+  const hasUnsavedChanges = title !== initialTitle || contentHtml !== initialContent;
 
   const maybeRequestReview = async () => {
     const currentCount = Number(await AsyncStorage.getItem(REVIEW_COUNT_KEY) || '0');
@@ -61,50 +62,64 @@ export default function EditScreen({ route, navigation }) {
     await AsyncStorage.setItem(REVIEW_PROMPTED_KEY, 'true');
   };
 
-  const persistNote = async () => {
-    const currentHtml = ensureHtmlContent(body || '');
+  const getCurrentHtml = useCallback(async () => {
+    const editorHtml = await editorRef.current?.getContentHtml?.();
+    return ensureHtmlContent(editorHtml ?? contentHtml ?? '');
+  }, [contentHtml]);
+
+  const persistNote = useCallback(async () => {
+    const currentHtml = await getCurrentHtml();
 
     if (!title.trim() && isHtmlContentEmpty(currentHtml)) {
       Alert.alert('Empty Note', 'Please add a title or some content before saving.');
       return false;
     }
 
-    const timestamp = new Date().toISOString();
-    const existingNotes = await loadNotes();
+    setContentHtml(currentHtml);
+    await noteStorage.saveNote({
+      ...note,
+      id: note?.id || uuidv4(),
+      title: title.trim(),
+      body: currentHtml,
+      content: currentHtml,
+      isPinned: note?.isPinned ?? false,
+    });
 
-    let updatedNotes;
-    if (note) {
-      updatedNotes = existingNotes.map((existingNote) => (
-        existingNote.id === note.id
-          ? {
-              ...existingNote,
-              title: title.trim(),
-              body: currentHtml,
-              updatedAt: timestamp,
-            }
-          : existingNote
-      ));
-    } else {
-      updatedNotes = [
-        {
-          id: uuidv4(),
-          title: title.trim(),
-          body: currentHtml,
-          createdAt: timestamp,
-          updatedAt: timestamp,
-          isPinned: false,
-        },
-        ...existingNotes,
-      ];
-    }
-
-    await saveNotes(updatedNotes);
     if (!note) {
       await maybeRequestReview();
     }
 
     return true;
-  };
+  }, [getCurrentHtml, note, title]);
+
+  const handleSave = useCallback(async () => {
+    try {
+      const didSave = await persistNote();
+      if (!didSave) {
+        return;
+      }
+
+      bypassPromptRef.current = true;
+      navigation.goBack();
+    } catch (error) {
+      Alert.alert('Unable to Save', error.message || 'Unable to save your note right now.');
+    }
+  }, [navigation, persistNote]);
+
+  useLayoutEffect(() => {
+    navigation.setOptions({
+      headerLeft: () => (
+        <TouchableOpacity style={styles.headerLeftButton} activeOpacity={0.8} onPress={() => navigation.goBack()}>
+          {note ? <ChevronLeft color={colors.text} size={22} /> : <Text style={styles.headerCancelText}>Cancel</Text>}
+        </TouchableOpacity>
+      ),
+      headerRight: () => (
+        <TouchableOpacity activeOpacity={0.8} onPress={handleSave}>
+          <Text style={styles.headerSaveText}>Save</Text>
+        </TouchableOpacity>
+      ),
+    });
+  }, [colors.text, handleSave, navigation, note, styles.headerCancelText, styles.headerLeftButton, styles.headerSaveText]);
 
   useEffect(() => {
     const unsubscribe = navigation.addListener('beforeRemove', (event) => {
@@ -119,20 +134,6 @@ export default function EditScreen({ route, navigation }) {
 
     return unsubscribe;
   }, [hasUnsavedChanges, navigation]);
-
-  const handleSave = async () => {
-    try {
-      const didSave = await persistNote();
-      if (!didSave) {
-        return;
-      }
-
-      bypassPromptRef.current = true;
-      navigation.goBack();
-    } catch (error) {
-      Alert.alert('Unable to Save', error.message || 'Unable to save your note right now.');
-    }
-  };
 
   const handlePromptDismiss = () => {
     pendingActionRef.current = null;
@@ -192,25 +193,46 @@ export default function EditScreen({ route, navigation }) {
           />
 
           <View style={styles.editorShell}>
-            <TextInput
-              style={styles.bodyInput}
-              placeholder="Start typing your thoughts..."
-              placeholderTextColor={colors.muted}
-              value={body}
-              onChangeText={setBody}
-              multiline
-              textAlignVertical="top"
-              selectionColor={colors.primary}
+            <RichEditor
+              ref={editorRef}
+              style={styles.richEditor}
+              placeholder="Start writing..."
+              initialHeight={0}
+              editorInitializedCallback={() => {
+                editorRef.current?.setContentHTML(initialContent);
+              }}
+              onChange={(html) => setContentHtml(ensureHtmlContent(html))}
+              editorStyle={{
+                backgroundColor: colors.surface,
+                color: colors.text,
+                caretColor: colors.primary,
+                placeholderColor: colors.muted,
+                contentCSSText: `
+                  font-size: 18px;
+                  line-height: 1.7;
+                  padding: 0 0 20px 0;
+                `,
+              }}
             />
           </View>
         </View>
 
-        <View style={[styles.footer, { paddingBottom: insets.bottom + 20 }]}>
-          <TouchableOpacity style={styles.saveButton} activeOpacity={0.8} onPress={handleSave}>
-            <Save color={colors.accentText} size={18} />
-            <Text style={styles.saveButtonText}> Save Note</Text>
-          </TouchableOpacity>
-        </View>
+        <RichToolbar
+          editor={editorRef}
+          actions={[
+            actions.setBold,
+            actions.setItalic,
+            actions.setUnderline,
+            actions.insertBulletsList,
+            actions.insertOrderedList,
+            actions.checkboxList,
+          ]}
+          iconTint={colors.muted}
+          selectedIconTint={colors.primary}
+          selectedButtonStyle={styles.toolbarButtonSelected}
+          style={[styles.toolbar, { paddingBottom: insets.bottom || 10 }]}
+          flatContainerStyle={styles.toolbarContent}
+        />
       </KeyboardAvoidingView>
 
       <Modal
@@ -257,6 +279,7 @@ const getStyles = (colors) => StyleSheet.create({
     flex: 1,
     paddingHorizontal: 20,
     paddingTop: 20,
+    paddingBottom: 12,
   },
   titleInput: {
     color: colors.text,
@@ -273,42 +296,43 @@ const getStyles = (colors) => StyleSheet.create({
     overflow: 'hidden',
     paddingHorizontal: 14,
     paddingTop: 14,
-    paddingBottom: 4,
+    paddingBottom: 8,
     ...Platform.select({
       ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.03, shadowRadius: 10 },
       android: { elevation: 1 },
     }),
   },
-  bodyInput: {
+  richEditor: {
     flex: 1,
-    minHeight: 320,
-    color: colors.text,
-    fontSize: 18,
-    lineHeight: 28,
-    paddingBottom: 24,
   },
-  footer: {
+  toolbar: {
     borderTopWidth: 1,
     borderTopColor: colors.border,
-    backgroundColor: colors.background,
-    paddingTop: 12,
-    paddingHorizontal: 20,
+    backgroundColor: colors.surface,
+    paddingHorizontal: 10,
+    paddingTop: 10,
   },
-  saveButton: {
-    flexDirection: 'row',
+  toolbarContent: {
+    justifyContent: 'space-between',
+  },
+  toolbarButtonSelected: {
+    backgroundColor: colors.background,
+    borderRadius: 10,
+  },
+  headerLeftButton: {
+    minWidth: 36,
+    minHeight: 36,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: colors.accent,
-    borderRadius: 999,
-    paddingVertical: 16,
-    ...Platform.select({
-      ios: { shadowColor: colors.text, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.15, shadowRadius: 8 },
-      android: { elevation: 4 },
-    }),
   },
-  saveButtonText: {
-    color: colors.accentText,
-    fontSize: 17,
+  headerCancelText: {
+    color: colors.text,
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  headerSaveText: {
+    color: colors.primary,
+    fontSize: 16,
     fontWeight: '700',
   },
   modalOverlay: {

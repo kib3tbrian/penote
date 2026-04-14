@@ -6,6 +6,7 @@ export default function NoteCard({
   title,
   preview,
   dateLabel,
+  dateColor,
   onPress,
   topRightAction,
   actions = [],
@@ -19,7 +20,7 @@ export default function NoteCard({
           <Text style={styles.title} numberOfLines={1}>
             {title || 'Untitled Note'}
           </Text>
-          <Text style={styles.date}>{dateLabel}</Text>
+          <Text style={[styles.date, dateColor ? { color: dateColor } : null]}>{dateLabel}</Text>
         </View>
         {topRightAction ? (
           <TouchableOpacity style={styles.topRightButton} activeOpacity={0.8} onPress={topRightAction.onPress}>

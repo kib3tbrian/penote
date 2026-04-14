@@ -21,6 +21,7 @@ import { theme } from '../theme';
 import {
   buildNoteDocumentHtml,
   getBodyPreview,
+  getNoteContent,
   getNoteDateLabel,
   getSearchableText,
   orderNotesWithFavoritesFirst,
@@ -121,7 +122,7 @@ export default function HomeScreen({ navigation }) {
     <NoteCard
       colors={colors}
       title={item.title}
-      preview={getBodyPreview(item.body)}
+      preview={getBodyPreview(getNoteContent(item))}
       dateLabel={getNoteDateLabel(item)}
       onPress={() => navigation.navigate('Edit', { note: item })}
       topRightAction={{
