@@ -126,7 +126,7 @@ export default function TrashScreen() {
       <View style={styles.topBar}>
         <View>
           <Text style={styles.topBarTitle}>Recently Deleted</Text>
-          <Text style={styles.topBarHint}>Notes are automatically removed after 7 days.</Text>
+          <Text style={styles.topBarHint}>Notes are auto-deleted after 7 days.</Text>
         </View>
         <TouchableOpacity style={styles.emptyButton} activeOpacity={0.8} onPress={handleEmptyTrash}>
           <Trash2 color={colors.danger} size={16} />

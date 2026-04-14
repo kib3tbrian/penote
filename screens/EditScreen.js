@@ -114,12 +114,12 @@ export default function EditScreen({ route, navigation }) {
         </TouchableOpacity>
       ),
       headerRight: () => (
-        <TouchableOpacity activeOpacity={0.8} onPress={handleSave}>
+        <TouchableOpacity style={styles.headerSaveButton} activeOpacity={0.8} onPress={handleSave}>
           <Text style={styles.headerSaveText}>Save</Text>
         </TouchableOpacity>
       ),
     });
-  }, [colors.text, handleSave, navigation, note, styles.headerCancelText, styles.headerLeftButton, styles.headerSaveText]);
+  }, [colors.text, handleSave, navigation, note, styles.headerCancelText, styles.headerLeftButton, styles.headerSaveButton, styles.headerSaveText]);
 
   useEffect(() => {
     const unsubscribe = navigation.addListener('beforeRemove', (event) => {
@@ -229,9 +229,11 @@ export default function EditScreen({ route, navigation }) {
           ]}
           iconTint={colors.muted}
           selectedIconTint={colors.primary}
+          iconSize={20}
+          unselectedButtonStyle={styles.toolbarButton}
           selectedButtonStyle={styles.toolbarButtonSelected}
+          disabledButtonStyle={styles.toolbarButton}
           style={[styles.toolbar, { paddingBottom: insets.bottom || 10 }]}
-          flatContainerStyle={styles.toolbarContent}
         />
       </KeyboardAvoidingView>
 
@@ -309,11 +311,14 @@ const getStyles = (colors) => StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: colors.border,
     backgroundColor: colors.surface,
-    paddingHorizontal: 10,
+    minHeight: 58,
+    paddingHorizontal: 8,
     paddingTop: 10,
   },
-  toolbarContent: {
-    justifyContent: 'space-between',
+  toolbarButton: {
+    minWidth: 40,
+    minHeight: 40,
+    borderRadius: 10,
   },
   toolbarButtonSelected: {
     backgroundColor: colors.background,
@@ -334,6 +339,16 @@ const getStyles = (colors) => StyleSheet.create({
     color: colors.primary,
     fontSize: 16,
     fontWeight: '700',
+  },
+  headerSaveButton: {
+    minHeight: 36,
+    paddingHorizontal: 14,
+    borderRadius: 999,
+    borderWidth: 1.5,
+    borderColor: colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.surface,
   },
   modalOverlay: {
     flex: 1,
