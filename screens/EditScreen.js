@@ -37,14 +37,27 @@ export default function EditScreen({ route, navigation }) {
     { key: actions.setUnderline, label: 'Underline' },
     { key: actions.insertBulletsList, label: 'Bullet list' },
     { key: actions.insertOrderedList, label: 'Ordered list' },
-    { key: actions.checkboxList, label: 'Checkbox' },
   ]), []);
 
   const [title, setTitle] = useState(initialTitle);
   const [contentHtml, setContentHtml] = useState(initialContent);
   const [isPromptVisible, setIsPromptVisible] = useState(false);
   const [isFormatMenuVisible, setIsFormatMenuVisible] = useState(false);
-  const [activeFormats, setActiveFormats] = useState([]);
+  const [activeFormat, setActiveFormat] = useState(null);
+
+  const getSingleActiveFormat = useCallback((items = []) => {
+    const nextFormats = items
+      .map((item) => (typeof item === 'string' ? item : item?.type))
+      .filter(Boolean);
+
+    for (const actionItem of formattingActions) {
+      if (nextFormats.includes(actionItem.key)) {
+        return actionItem.key;
+      }
+    }
+
+    return null;
+  }, [formattingActions]);
 
   const colorScheme = useColorScheme();
   const isDark = colorScheme === 'dark';
@@ -135,12 +148,9 @@ export default function EditScreen({ route, navigation }) {
     }
 
     editorRef.current.registerToolbar((items) => {
-      const nextActiveFormats = items
-        .map((item) => (typeof item === 'string' ? item : item?.type))
-        .filter(Boolean);
-      setActiveFormats(nextActiveFormats);
+      setActiveFormat(getSingleActiveFormat(items));
     });
-  }, []);
+  }, [getSingleActiveFormat]);
 
   useEffect(() => {
     const unsubscribe = navigation.addListener('beforeRemove', (event) => {
@@ -197,6 +207,12 @@ export default function EditScreen({ route, navigation }) {
   };
 
   const handleFormatPress = (formatAction) => {
+    formattingActions.forEach(({ key }) => {
+      if (key !== formatAction && activeFormat === key) {
+        editorRef.current?.sendAction?.(key, 'result');
+      }
+    });
+
     editorRef.current?.sendAction?.(formatAction, 'result');
   };
 
@@ -247,11 +263,11 @@ export default function EditScreen({ route, navigation }) {
           <Pressable style={styles.floatingOverlay} onPress={() => setIsFormatMenuVisible(false)} />
         ) : null}
 
-        <View style={[styles.floatingFormatContainer, { bottom: Math.max(insets.bottom, 16) + 12 }]}>
+        <View style={[styles.floatingFormatContainer, { bottom: insets.bottom + 92 }]}>
           {isFormatMenuVisible ? (
             <View style={styles.formatMenu}>
               {formattingActions.map((actionItem) => {
-                const isActive = activeFormats.includes(actionItem.key);
+                const isActive = activeFormat === actionItem.key;
 
                 return (
                   <TouchableOpacity
@@ -323,7 +339,7 @@ const getStyles = (colors) => StyleSheet.create({
     flex: 1,
     paddingHorizontal: 20,
     paddingTop: 20,
-    paddingBottom: 12,
+    paddingBottom: 128,
   },
   titleInput: {
     color: colors.text,
@@ -340,7 +356,7 @@ const getStyles = (colors) => StyleSheet.create({
     overflow: 'hidden',
     paddingHorizontal: 14,
     paddingTop: 14,
-    paddingBottom: 8,
+    paddingBottom: 20,
     ...Platform.select({
       ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.03, shadowRadius: 10 },
       android: { elevation: 1 },

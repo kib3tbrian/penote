@@ -75,6 +75,155 @@ export const getBodyPreview = (value = '') =>
 
 export const getNoteContent = (note) => ensureHtmlContent(note?.content ?? note?.body ?? '');
 
+const decodeHtmlEntities = (value = '') =>
+  value
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&amp;/gi, '&')
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;/gi, "'");
+
+export const getRichPreviewSegments = (value = '') => {
+  const html = getNoteContent({ content: value });
+  if (!html) return [];
+
+  const tokens = html.match(/(<[^>]+>|[^<]+)/g) || [];
+  const segments = [];
+  const listStack = [];
+  let boldDepth = 0;
+  let italicDepth = 0;
+  let underlineDepth = 0;
+  let orderedIndex = 1;
+  let pendingPrefix = '';
+
+  const appendText = (text = '') => {
+    const decodedText = decodeHtmlEntities(text).replace(/\s+/g, ' ');
+    if (!decodedText.trim()) {
+      return;
+    }
+
+    segments.push({
+      text: `${pendingPrefix}${decodedText}`,
+      bold: boldDepth > 0,
+      italic: italicDepth > 0,
+      underline: underlineDepth > 0,
+    });
+    pendingPrefix = '';
+  };
+
+  const appendLineBreak = () => {
+    const lastSegment = segments[segments.length - 1];
+    if (lastSegment?.text === '\n') {
+      return;
+    }
+    segments.push({ text: '\n' });
+  };
+
+  tokens.forEach((token) => {
+    if (!token.startsWith('<')) {
+      appendText(token);
+      return;
+    }
+
+    const normalizedToken = token.toLowerCase();
+
+    if (normalizedToken.startsWith('<strong') || normalizedToken.startsWith('<b')) {
+      boldDepth += 1;
+      return;
+    }
+
+    if (normalizedToken.startsWith('</strong') || normalizedToken.startsWith('</b')) {
+      boldDepth = Math.max(0, boldDepth - 1);
+      return;
+    }
+
+    if (normalizedToken.startsWith('<em') || normalizedToken.startsWith('<i')) {
+      italicDepth += 1;
+      return;
+    }
+
+    if (normalizedToken.startsWith('</em') || normalizedToken.startsWith('</i')) {
+      italicDepth = Math.max(0, italicDepth - 1);
+      return;
+    }
+
+    if (normalizedToken.startsWith('<u')) {
+      underlineDepth += 1;
+      return;
+    }
+
+    if (normalizedToken.startsWith('</u')) {
+      underlineDepth = Math.max(0, underlineDepth - 1);
+      return;
+    }
+
+    if (normalizedToken.startsWith('<ol')) {
+      listStack.push('ordered');
+      orderedIndex = 1;
+      return;
+    }
+
+    if (normalizedToken.startsWith('</ol')) {
+      listStack.pop();
+      appendLineBreak();
+      return;
+    }
+
+    if (normalizedToken.startsWith('<ul')) {
+      listStack.push('unordered');
+      return;
+    }
+
+    if (normalizedToken.startsWith('</ul')) {
+      listStack.pop();
+      appendLineBreak();
+      return;
+    }
+
+    if (normalizedToken.startsWith('<li')) {
+      const currentListType = listStack[listStack.length - 1];
+      appendLineBreak();
+      if (currentListType === 'ordered') {
+        pendingPrefix = `${orderedIndex}. `;
+        orderedIndex += 1;
+      } else {
+        pendingPrefix = '• ';
+      }
+      return;
+    }
+
+    if (normalizedToken.startsWith('</li')) {
+      appendLineBreak();
+      return;
+    }
+
+    if (normalizedToken.includes('type="checkbox"')) {
+      pendingPrefix = normalizedToken.includes('checked') ? '☑ ' : '☐ ';
+      return;
+    }
+
+    if (normalizedToken.startsWith('<br')) {
+      appendLineBreak();
+      return;
+    }
+
+    if (
+      normalizedToken.startsWith('<p') ||
+      normalizedToken.startsWith('</p') ||
+      normalizedToken.startsWith('<div') ||
+      normalizedToken.startsWith('</div')
+    ) {
+      appendLineBreak();
+    }
+  });
+
+  return segments.filter((segment, index, allSegments) => {
+    if (segment.text !== '\n') return true;
+    return index > 0 && index < allSegments.length - 1;
+  });
+};
+
 export const getSearchableText = (note) =>
   `${note?.title || ''} ${getBodyPreview(getNoteContent(note))}`.toLowerCase();
 

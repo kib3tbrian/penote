@@ -1,10 +1,12 @@
 import React, { useMemo } from 'react';
 import { Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { getRichPreviewSegments } from '../utils/noteHelpers';
 
 export default function NoteCard({
   colors,
   title,
   preview,
+  previewHtml,
   dateLabel,
   dateColor,
   onPress,
@@ -12,6 +14,10 @@ export default function NoteCard({
   actions = [],
 }) {
   const styles = useMemo(() => getStyles(colors), [colors]);
+  const previewSegments = useMemo(
+    () => getRichPreviewSegments(previewHtml || ''),
+    [previewHtml]
+  );
 
   return (
     <TouchableOpacity style={styles.card} activeOpacity={0.85} onPress={onPress}>
@@ -30,7 +36,18 @@ export default function NoteCard({
       </View>
 
       <Text style={styles.preview} numberOfLines={2}>
-        {preview || 'No additional content'}
+        {previewSegments.length > 0 ? previewSegments.map((segment, index) => (
+          <Text
+            key={`${segment.text}-${index}`}
+            style={[
+              segment.bold ? styles.previewBold : null,
+              segment.italic ? styles.previewItalic : null,
+              segment.underline ? styles.previewUnderline : null,
+            ]}
+          >
+            {segment.text}
+          </Text>
+        )) : (preview || 'No additional content')}
       </Text>
 
       {actions.length > 0 ? (
@@ -110,6 +127,15 @@ const getStyles = (colors) => StyleSheet.create({
     color: colors.muted,
     fontSize: 14,
     lineHeight: 21,
+  },
+  previewBold: {
+    fontWeight: '700',
+  },
+  previewItalic: {
+    fontStyle: 'italic',
+  },
+  previewUnderline: {
+    textDecorationLine: 'underline',
   },
   footer: {
     marginTop: 14,

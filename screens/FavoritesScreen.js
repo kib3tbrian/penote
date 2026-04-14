@@ -10,6 +10,7 @@ import { theme } from '../theme';
 import {
   buildNoteDocumentHtml,
   getBodyPreview,
+  getNoteContent,
   getNoteDateLabel,
   sanitizePdfFileName,
 } from '../utils/noteHelpers';
@@ -85,7 +86,8 @@ export default function FavoritesScreen({ navigation }) {
     <NoteCard
       colors={colors}
       title={item.title}
-      preview={getBodyPreview(item.body)}
+      preview={getBodyPreview(getNoteContent(item))}
+      previewHtml={getNoteContent(item)}
       dateLabel={getNoteDateLabel(item)}
       onPress={() => navigation.navigate('Edit', { note: item })}
       topRightAction={{

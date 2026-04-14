@@ -123,6 +123,7 @@ export default function HomeScreen({ navigation }) {
       colors={colors}
       title={item.title}
       preview={getBodyPreview(getNoteContent(item))}
+      previewHtml={getNoteContent(item)}
       dateLabel={getNoteDateLabel(item)}
       onPress={() => navigation.navigate('Edit', { note: item })}
       topRightAction={{
