@@ -15,8 +15,8 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as StoreReview from 'expo-store-review';
 import { v4 as uuidv4 } from 'uuid';
-import { ChevronLeft } from 'lucide-react-native';
-import { RichEditor, RichToolbar, actions } from 'react-native-pell-rich-editor';
+import { Plus } from 'lucide-react-native';
+import { RichEditor, actions } from 'react-native-pell-rich-editor';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { theme } from '../theme';
 import {
@@ -31,10 +31,20 @@ export default function EditScreen({ route, navigation }) {
   const { note } = route.params || {};
   const initialTitle = note?.title || '';
   const initialContent = ensureHtmlContent(note?.content ?? note?.body ?? '');
+  const formattingActions = useMemo(() => ([
+    { key: actions.setBold, label: 'Bold' },
+    { key: actions.setItalic, label: 'Italic' },
+    { key: actions.setUnderline, label: 'Underline' },
+    { key: actions.insertBulletsList, label: 'Bullet list' },
+    { key: actions.insertOrderedList, label: 'Ordered list' },
+    { key: actions.checkboxList, label: 'Checkbox' },
+  ]), []);
 
   const [title, setTitle] = useState(initialTitle);
   const [contentHtml, setContentHtml] = useState(initialContent);
   const [isPromptVisible, setIsPromptVisible] = useState(false);
+  const [isFormatMenuVisible, setIsFormatMenuVisible] = useState(false);
+  const [activeFormats, setActiveFormats] = useState([]);
 
   const colorScheme = useColorScheme();
   const isDark = colorScheme === 'dark';
@@ -108,18 +118,29 @@ export default function EditScreen({ route, navigation }) {
 
   useLayoutEffect(() => {
     navigation.setOptions({
-      headerLeft: () => (
-        <TouchableOpacity style={styles.headerLeftButton} activeOpacity={0.8} onPress={() => navigation.goBack()}>
-          {note ? <ChevronLeft color={colors.text} size={22} /> : <Text style={styles.headerCancelText}>Cancel</Text>}
-        </TouchableOpacity>
-      ),
+      headerBackVisible: false,
+      headerTitle: '',
+      headerLeft: () => <Text style={styles.headerTitleText}>New Note</Text>,
       headerRight: () => (
         <TouchableOpacity style={styles.headerSaveButton} activeOpacity={0.8} onPress={handleSave}>
           <Text style={styles.headerSaveText}>Save</Text>
         </TouchableOpacity>
       ),
     });
-  }, [colors.text, handleSave, navigation, note, styles.headerCancelText, styles.headerLeftButton, styles.headerSaveButton, styles.headerSaveText]);
+  }, [handleSave, navigation, styles.headerSaveButton, styles.headerSaveText, styles.headerTitleText]);
+
+  useEffect(() => {
+    if (!editorRef.current) {
+      return;
+    }
+
+    editorRef.current.registerToolbar((items) => {
+      const nextActiveFormats = items
+        .map((item) => (typeof item === 'string' ? item : item?.type))
+        .filter(Boolean);
+      setActiveFormats(nextActiveFormats);
+    });
+  }, []);
 
   useEffect(() => {
     const unsubscribe = navigation.addListener('beforeRemove', (event) => {
@@ -175,6 +196,10 @@ export default function EditScreen({ route, navigation }) {
     navigation.goBack();
   };
 
+  const handleFormatPress = (formatAction) => {
+    editorRef.current?.sendAction?.(formatAction, 'result');
+  };
+
   return (
     <>
       <KeyboardAvoidingView
@@ -217,24 +242,41 @@ export default function EditScreen({ route, navigation }) {
           </View>
         </View>
 
-        <RichToolbar
-          editor={editorRef}
-          actions={[
-            actions.setBold,
-            actions.setItalic,
-            actions.setUnderline,
-            actions.insertBulletsList,
-            actions.insertOrderedList,
-            actions.checkboxList,
-          ]}
-          iconTint={colors.muted}
-          selectedIconTint={colors.primary}
-          iconSize={20}
-          unselectedButtonStyle={styles.toolbarButton}
-          selectedButtonStyle={styles.toolbarButtonSelected}
-          disabledButtonStyle={styles.toolbarButton}
-          style={[styles.toolbar, { paddingBottom: insets.bottom || 10 }]}
-        />
+
+        {isFormatMenuVisible ? (
+          <Pressable style={styles.floatingOverlay} onPress={() => setIsFormatMenuVisible(false)} />
+        ) : null}
+
+        <View style={[styles.floatingFormatContainer, { bottom: Math.max(insets.bottom, 16) + 12 }]}>
+          {isFormatMenuVisible ? (
+            <View style={styles.formatMenu}>
+              {formattingActions.map((actionItem) => {
+                const isActive = activeFormats.includes(actionItem.key);
+
+                return (
+                  <TouchableOpacity
+                    key={actionItem.key}
+                    style={[styles.formatMenuItem, isActive ? styles.formatMenuItemActive : null]}
+                    activeOpacity={0.85}
+                    onPress={() => handleFormatPress(actionItem.key)}
+                  >
+                    <Text style={[styles.formatMenuText, isActive ? styles.formatMenuTextActive : null]}>
+                      {actionItem.label}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          ) : null}
+
+          <TouchableOpacity
+            style={styles.formatFab}
+            activeOpacity={0.85}
+            onPress={() => setIsFormatMenuVisible((currentValue) => !currentValue)}
+          >
+            <Plus color={colors.accentText} size={28} />
+          </TouchableOpacity>
+        </View>
       </KeyboardAvoidingView>
 
       <Modal
@@ -307,33 +349,11 @@ const getStyles = (colors) => StyleSheet.create({
   richEditor: {
     flex: 1,
   },
-  toolbar: {
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
-    backgroundColor: colors.surface,
-    minHeight: 58,
-    paddingHorizontal: 8,
-    paddingTop: 10,
-  },
-  toolbarButton: {
-    minWidth: 40,
-    minHeight: 40,
-    borderRadius: 10,
-  },
-  toolbarButtonSelected: {
-    backgroundColor: colors.background,
-    borderRadius: 10,
-  },
-  headerLeftButton: {
-    minWidth: 36,
-    minHeight: 36,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  headerCancelText: {
+  headerTitleText: {
     color: colors.text,
-    fontSize: 16,
-    fontWeight: '600',
+    fontSize: 22,
+    fontWeight: '700',
+    fontFamily: Platform.OS === 'ios' ? 'Georgia' : 'serif',
   },
   headerSaveText: {
     color: colors.primary,
@@ -349,6 +369,56 @@ const getStyles = (colors) => StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: colors.surface,
+  },
+  floatingOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'transparent',
+  },
+  floatingFormatContainer: {
+    position: 'absolute',
+    right: 24,
+    alignItems: 'flex-end',
+  },
+  formatMenu: {
+    marginBottom: 12,
+    backgroundColor: colors.surface,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: 8,
+    minWidth: 180,
+    ...Platform.select({
+      ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.1, shadowRadius: 12 },
+      android: { elevation: 6 },
+    }),
+  },
+  formatMenuItem: {
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderRadius: 14,
+  },
+  formatMenuItemActive: {
+    backgroundColor: colors.accent,
+  },
+  formatMenuText: {
+    color: colors.text,
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  formatMenuTextActive: {
+    color: colors.accentText,
+  },
+  formatFab: {
+    width: 62,
+    height: 62,
+    borderRadius: 31,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.accent,
+    ...Platform.select({
+      ios: { shadowColor: colors.text, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.15, shadowRadius: 6 },
+      android: { elevation: 6 },
+    }),
   },
   modalOverlay: {
     flex: 1,
