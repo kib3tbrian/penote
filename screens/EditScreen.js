@@ -339,7 +339,7 @@ const getStyles = (colors) => StyleSheet.create({
     flex: 1,
     paddingHorizontal: 20,
     paddingTop: 20,
-    paddingBottom: 128,
+    paddingBottom: 84,
   },
   titleInput: {
     color: colors.text,
